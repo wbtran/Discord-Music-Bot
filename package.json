@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "main": "app.js",
   "dependencies": {
-    "discord.js": "^11.2.1",
+    "discord.js": "^11.3.0",
     "opusscript": "0.0.6",
     "simple-youtube-api": "^5.0.0",
-    "ytdl-core": "^0.18.5"
+    "ytdl-core": "^0.18.7"
   },
   "devDependencies": {
     "eslint-config-google": "^0.9.1"
