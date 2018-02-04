@@ -22,7 +22,7 @@ exports.run = async function(client, message, args) {
   }
 
   let startTime;
-  let startFlag = "start=";
+  let startFlag = "at:";
   if(args[args.length-1].slice(0, startFlag.length).toLowerCase() === startFlag) {
     startTime = args.pop().slice(startFlag.length).toLowerCase();
     if(!isNaN(startTime[startTime.length-1])) {
@@ -34,8 +34,8 @@ exports.run = async function(client, message, args) {
 
   try {
     await joinChannel();
-    let result = await searchSong(searchTerm, startTime);
-    enqueueSong(result.title, result.url, result.begin);
+    let song = await searchSong(searchTerm, startTime);
+    enqueueSong(song);
     while(server.queue.length > 0) {
       let song = await loadSong();
       await playSong(song);
@@ -70,7 +70,20 @@ exports.run = async function(client, message, args) {
       // youtu.be url
       else if(parsed.host === "youtu.be" && parsed.path) searchTerm = parsed.pathname.slice(1);
       yt.searchVideos(searchTerm, 1)
-        .then(ytResults => resolve({title: ytResults[0].title, url: ytResults[0].url, begin: startTime || parsed.query.t}))
+        .then(videos => {
+          yt.getVideo(videos[0].url)
+            .then(video => {
+              let duration = formatDuration(video.duration);
+              let begin = startTime || parsed.query.t;
+              resolve({
+                title: videos[0].title,
+                url: videos[0].url,
+                duration: duration,
+                length: video.durationSeconds,
+                begin: begin
+              });
+            });
+        })
         .catch(err => {
           message.channel.send("No songs found");
           reject(err);
@@ -79,9 +92,9 @@ exports.run = async function(client, message, args) {
   }
 
 
-  function enqueueSong(title, url, begin) {
-    if(server.playing != null) announceQueueing(title);
-    server.queue.push({title: title, url: url, begin: begin, user: message.member.displayName});
+  function enqueueSong(song) {
+    if(server.playing != null) announceQueueing(song.title, song.duration);
+    server.queue.push(Object.assign(song, {user: message.member.displayName}));
   }
 
 
@@ -112,9 +125,20 @@ exports.run = async function(client, message, args) {
       try {
         let options = {volume: VOLUME/100};
         if(song.begin) {
-          let seek = convertTimestampToSeconds(song.begin);
-          if(seek === 0 || isNaN(seek)) song.begin = null;
-          else options.seek = seek;
+          let seek = convertHMSToSeconds(song.begin);
+          // start at beginning and do not announce starting time for these conditions
+          if(seek === 0 || isNaN(seek) || seek >= song.length) {
+            song.begin = null;
+          }
+          else {
+            options.seek = seek;
+            if(seek < 3600) {
+              song.begin = new Date(seek * 1000).toISOString().substr(14, 5);
+            }
+            else {
+              song.begin = new Date(seek * 1000).toISOString().substr(11, 8);
+            }
+          }
         }
         announcePlaying(song);
         let dispatcher = server.connection.playStream(song.stream, options);
@@ -133,28 +157,29 @@ exports.run = async function(client, message, args) {
   }
 
 
-  function announceQueueing(title) {
-    message.channel.send(`Queueing **${title}**`)
+  function announceQueueing(title, duration) {
+    message.channel.send(`Queueing **${title}** \`[${duration}]\``)
       .then(() => {
-        console.log(`[Music] Queueing ${title}`);
+        console.log(`[Music] Queueing ${title} [${duration}]`);
       })
       .catch(err => console.log(err));
   }
 
 
   function announcePlaying(song) {
-    let msg = `Now playing **${song.title}**`;
-    if(song.begin) msg += ` starting at **${song.begin}**`;
-    msg += ` queued by **${song.user}**`;
+    let msg = `Now playing **${song.title}** \``;
+    if(song.begin) msg += `[${song.begin}/`;
+    else msg += "[";
+    msg += `${song.duration}]\` queued by **${song.user}**`;
     message.channel.send(msg)
       .then(() => {
-        console.log(`[Music] Now playing ${song.title} queued by ${song.user}`);
+        console.log(`[Music] Now playing ${song.title} [${song.duration}] queued by ${song.user}`);
       })
       .catch(err => console.log(err));
   }
 
 
-  function convertTimestampToSeconds(time) {
+  function convertHMSToSeconds(time) {
     let h = 0, m = 0, s = 0;
     if(time.indexOf("h") !== -1) {
       h = time.split("h");
@@ -171,5 +196,25 @@ exports.run = async function(client, message, args) {
       s = s[0];
     }
     return h*3600 + m*60 + s*1;
+  }
+
+
+  function formatDuration(duration) {
+    let include = false;
+    let timePeriods = [];
+    for(let timePeriod in duration) {
+      let t = duration[timePeriod];
+      if(t > 0 || include === true) {
+        include = true;
+        // prepend single digits with 0
+        if(timePeriods.length > 0 && t < 10) t = "0" + t;
+        timePeriods.push(t);
+      }
+    }
+    // prepend 00 minutes if duration is only seconds
+    if(timePeriods.length === 1) {
+      timePeriods.unshift("00");
+    }
+    return timePeriods.join(":");
   }
 };

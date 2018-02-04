@@ -5,10 +5,10 @@ exports.run = function(client, message) {
       .catch(err => console.log(err));
   }
   let playing = client.servers[message.guild.id].playing;
-  let msg = `Now playing **${playing.title}** queued by **${playing.user}**`;
+  let msg = `Now playing **${playing.title}** \`[${playing.duration}]\` queued by **${playing.user}**`;
   let i = 1;
   for(let song of queue) {
-    msg += `\n${i++}. **${song.title}** queued by **${song.user}**`;
+    msg += `\n${i++}. **${song.title}** \`[${song.duration}]\` queued by **${song.user}**`;
   }
   message.channel.send(msg)
     .catch(err => console.log(err));
