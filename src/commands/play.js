@@ -1,3 +1,4 @@
+const url = require("url");
 const ytapi = require("simple-youtube-api");
 const ytdl = require("ytdl-core");
 
@@ -26,7 +27,7 @@ exports.run = async function(client, message, args) {
   try {
     await joinChannel();
     let result = await searchSong(searchTerm);
-    await enqueueSong(result.title, result.url);
+    enqueueSong(result.title, result.url, result.begin);
     while(server.queue.length > 0) {
       let song = await loadSong();
       await playSong(song);
@@ -55,19 +56,41 @@ exports.run = async function(client, message, args) {
 
   function searchSong(searchTerm) {
     return new Promise((resolve, reject) => {
-      yt.searchVideos(searchTerm, 1)
-        .then(results => resolve(results[0]))
-        .catch(err => reject(err));
+      let parsed = url.parse(searchTerm, true);
+      // youtube url
+      if(parsed.host === "www.youtube.com" && parsed.query.v) {
+        yt.getVideoByID(parsed.query.v)
+          .then(ytResults => resolve({title: ytResults.title, url: ytResults.url, begin: parsed.query.t}))
+          .catch(err => {
+            message.channel.send("Song not found");
+            reject(err);
+          });
+      }
+      // youtu.be url
+      else if(parsed.host === "youtu.be" && parsed.path) {
+        yt.getVideoByID(parsed.pathname.slice(1))
+          .then(ytResults => resolve({title: ytResults.title, url: ytResults.url, begin: parsed.query.t}))
+          .catch(err => {
+            message.channel.send("Song not found");
+            reject(err);
+          });
+      }
+      // search term
+      else {
+        yt.searchVideos(searchTerm, 1)
+          .then(ytResults => resolve({title: ytResults[0].title, url: ytResults[0].url}))
+          .catch(err => {
+            message.channel.send("Song not found");
+            reject(err);
+          });
+      }
     });
   }
 
 
-  function enqueueSong(title, url) {
-    return new Promise((resolve) => {
-      if(server.playing != null) announceQueueing(title);
-      server.queue.push({title: title, url: url, user: message.member.displayName});
-      return resolve();
-    });
+  function enqueueSong(title, url, begin) {
+    if(server.playing != null) announceQueueing(title);
+    server.queue.push({title: title, url: url, begin: begin, user: message.member.displayName});
   }
 
 
@@ -84,7 +107,7 @@ exports.run = async function(client, message, args) {
 
       server.playing = server.queue.shift();
       try {
-        let stream = ytdl(server.playing.url, {filter: "audioonly"});
+        let stream = ytdl(server.playing.url);
         resolve(Object.assign(server.playing, {stream}));
       } catch(err) {
         reject(err);
@@ -95,16 +118,22 @@ exports.run = async function(client, message, args) {
 
   function playSong(song) {
     return new Promise((resolve, reject) => {
-      announcePlaying(song);
-      let dispatcher = server.connection.playStream(song.stream);
-      dispatcher.setVolume(VOLUME / 100);
-      // load next song in queue
-      dispatcher.on("end", () => {
-        server.playing = null;
-        song.stream.destroy();
-        resolve();
-      });
-      dispatcher.on("error", err => reject(err));
+      try {
+        announcePlaying(song);
+        let options = {volume: VOLUME/100};
+        if(song.begin) options.seek = convertTimestampToSeconds(song.begin);
+        let dispatcher = server.connection.playStream(song.stream, options);
+        server.dispatcher = dispatcher;
+        // load next song in queue
+        dispatcher.on("end", () => {
+          server.playing = null;
+          resolve();
+        });
+        dispatcher.on("error", err => reject(err));
+      }
+      catch(err) {
+        reject(err);
+      }
     });
   }
 
@@ -126,11 +155,34 @@ exports.run = async function(client, message, args) {
   function announcePlaying(song) {
     if(server.lastMessage) server.lastMessage.delete()
       .catch();
-    message.channel.send(`Now playing **${song.title}** queued by **${song.user}**`)
+    let msg = `Now playing **${song.title}**`;
+    if(song.begin) msg += ` starting at **${song.begin}**`;
+    msg += ` queued by **${song.user}**`;
+    message.channel.send(msg)
       .then(message => {
         console.log(`[Music] Now playing ${song.title} queued by ${song.user}`);
         server.lastMessage = message;
       })
       .catch(err => console.log(err));
+  }
+
+
+  function convertTimestampToSeconds(time) {
+    let h = 0, m = 0, s = 0;
+    if(time.indexOf("h") !== -1) {
+      h = time.split("h");
+      time = h[1];
+      h = h[0];
+    }
+    if(time.indexOf("m") !== -1) {
+      m = time.split("m");
+      time = m[1];
+      m = m[0];
+    }
+    if(time.indexOf("s") !== -1) {
+      s = time.split("s");
+      s = s[0];
+    }
+    return h*3600 + m*60 + s*1;
   }
 };

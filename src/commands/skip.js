@@ -1,7 +1,12 @@
 exports.run = function(client, message) {
-  let playing = client.servers[message.guild.id].playing;
-  if(playing) {
-    message.channel.send(`Skipping **${playing.title}** queued by **${playing.user}**`);
-    message.guild.voiceConnection.dispatcher.end();
+  try {
+    let playing = client.servers[message.guild.id].playing;
+    if(playing) {
+      message.channel.send(`Skipping **${playing.title}** queued by **${playing.user}**`);
+      client.servers[message.guild.id].dispatcher.end();
+    }
+  }
+  catch(err) {
+    console.log(err);
   }
 };
