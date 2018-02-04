@@ -139,29 +139,21 @@ exports.run = async function(client, message, args) {
 
 
   function announceQueueing(title) {
-    if(server.lastMessage) {
-      server.lastMessage.delete()
-        .catch();
-    }
     message.channel.send(`Queueing **${title}**`)
-      .then(message => {
+      .then(() => {
         console.log(`[Music] Queueing ${title}`);
-        server.lastMessage = message;
       })
       .catch(err => console.log(err));
   }
 
 
   function announcePlaying(song) {
-    if(server.lastMessage) server.lastMessage.delete()
-      .catch();
     let msg = `Now playing **${song.title}**`;
     if(song.begin) msg += ` starting at **${song.begin}**`;
     msg += ` queued by **${song.user}**`;
     message.channel.send(msg)
-      .then(message => {
+      .then(() => {
         console.log(`[Music] Now playing ${song.title} queued by ${song.user}`);
-        server.lastMessage = message;
       })
       .catch(err => console.log(err));
   }

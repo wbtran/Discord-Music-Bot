@@ -43,7 +43,6 @@ function autojoin() {
       for(let guild of client.guilds.values()) {
         // initialize server objects
         client.servers[guild.id] = {
-          lastMessage: undefined,
           playing: null,
           queue: []
         };
