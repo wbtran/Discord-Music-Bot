@@ -21,12 +21,20 @@ exports.run = async function(client, message, args) {
     return message.channel.send("Provide a YouTube link or search query");
   }
 
+  let startTime;
+  let startFlag = "start=";
+  if(args[args.length-1].slice(0, startFlag.length).toLowerCase() === startFlag) {
+    startTime = args.pop().slice(startFlag.length).toLowerCase();
+    if(!isNaN(startTime[startTime.length-1])) {
+      startTime += "s";
+    }
+  }
   let searchTerm = args.join(" ");
   let server = client.servers[message.guild.id];
 
   try {
     await joinChannel();
-    let result = await searchSong(searchTerm);
+    let result = await searchSong(searchTerm, startTime);
     enqueueSong(result.title, result.url, result.begin);
     while(server.queue.length > 0) {
       let song = await loadSong();
@@ -54,36 +62,19 @@ exports.run = async function(client, message, args) {
   }
 
 
-  function searchSong(searchTerm) {
+  function searchSong(searchTerm, startTime) {
     return new Promise((resolve, reject) => {
       let parsed = url.parse(searchTerm, true);
       // youtube url
-      if(parsed.host === "www.youtube.com" && parsed.query.v) {
-        yt.getVideoByID(parsed.query.v)
-          .then(ytResults => resolve({title: ytResults.title, url: ytResults.url, begin: parsed.query.t}))
-          .catch(err => {
-            message.channel.send("Song not found");
-            reject(err);
-          });
-      }
+      if(parsed.host === "www.youtube.com" && parsed.query.v) searchTerm = parsed.query.v;
       // youtu.be url
-      else if(parsed.host === "youtu.be" && parsed.path) {
-        yt.getVideoByID(parsed.pathname.slice(1))
-          .then(ytResults => resolve({title: ytResults.title, url: ytResults.url, begin: parsed.query.t}))
-          .catch(err => {
-            message.channel.send("Song not found");
-            reject(err);
-          });
-      }
-      // search term
-      else {
-        yt.searchVideos(searchTerm, 1)
-          .then(ytResults => resolve({title: ytResults[0].title, url: ytResults[0].url}))
-          .catch(err => {
-            message.channel.send("Song not found");
-            reject(err);
-          });
-      }
+      else if(parsed.host === "youtu.be" && parsed.path) searchTerm = parsed.pathname.slice(1);
+      yt.searchVideos(searchTerm, 1)
+        .then(ytResults => resolve({title: ytResults[0].title, url: ytResults[0].url, begin: startTime || parsed.query.t}))
+        .catch(err => {
+          message.channel.send("No songs found");
+          reject(err);
+        });
     });
   }
 
@@ -119,9 +110,13 @@ exports.run = async function(client, message, args) {
   function playSong(song) {
     return new Promise((resolve, reject) => {
       try {
-        announcePlaying(song);
         let options = {volume: VOLUME/100};
-        if(song.begin) options.seek = convertTimestampToSeconds(song.begin);
+        if(song.begin) {
+          let seek = convertTimestampToSeconds(song.begin);
+          if(seek === 0 || isNaN(seek)) song.begin = null;
+          else options.seek = seek;
+        }
+        announcePlaying(song);
         let dispatcher = server.connection.playStream(song.stream, options);
         server.dispatcher = dispatcher;
         // load next song in queue
