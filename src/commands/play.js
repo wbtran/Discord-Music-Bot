@@ -207,7 +207,7 @@ exports.run = async function(client, message, args) {
       if(t > 0 || include === true) {
         include = true;
         // prepend single digits with 0
-        if(timePeriods.length > 0 && t < 10) t = "0" + t;
+        if(t < 10) t = "0" + t;
         timePeriods.push(t);
       }
     }
