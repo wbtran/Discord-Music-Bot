@@ -1,6 +1,7 @@
 node_modules
 npm-debug.log
 
+audio_cache/
 config.json
 
 TODO

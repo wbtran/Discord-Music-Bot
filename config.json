@@ -1,4 +1,5 @@
 {
+  "CACHE_AUDIO": true,
   "OWNER_ID": "YOUR DISCORD USER ID",
   "PREFIX": "!",
   "TOKEN": "YOUR DISCORD BOT TOKEN",

@@ -1,8 +1,10 @@
+const fs = require("fs");
+const sanitize = require("sanitize-filename");
 const url = require("url");
 const ytapi = require("simple-youtube-api");
 const ytdl = require("ytdl-core");
 
-const { VOLUME, YOUTUBE_API_KEY } = require("../../config.json");
+const { CACHE_AUDIO, VOLUME, YOUTUBE_API_KEY } = require("../../config.json");
 const yt = new ytapi(YOUTUBE_API_KEY);
 
 
@@ -70,19 +72,18 @@ exports.run = async function(client, message, args) {
       // youtu.be url
       else if(parsed.host === "youtu.be" && parsed.path) searchTerm = parsed.pathname.slice(1);
       yt.searchVideos(searchTerm, 1)
-        .then(videos => {
-          yt.getVideo(videos[0].url)
-            .then(video => {
-              let duration = formatDuration(video.duration);
-              let begin = startTime || parsed.query.t;
-              resolve({
-                title: videos[0].title,
-                url: videos[0].url,
-                duration: duration,
-                length: video.durationSeconds,
-                begin: begin
-              });
-            });
+        .then(videos => yt.getVideo(videos[0].url))
+        .then(video => {
+          let duration = formatDuration(video.duration);
+          let begin = startTime || parsed.query.t;
+          resolve({
+            begin: begin,
+            duration: duration,
+            durationSeconds: video.durationSeconds,
+            title: video.title,
+            url: video.url,
+            videoID: video.id
+          });
         })
         .catch(err => {
           message.channel.send("No songs found");
@@ -109,11 +110,24 @@ exports.run = async function(client, message, args) {
       // don't load if already playing song
       if(message.guild.voiceConnection.dispatcher) return;
 
-      server.playing = server.queue.shift();
+      let song = server.playing = server.queue.shift();
       try {
-        let stream = ytdl(server.playing.url);
-        resolve(Object.assign(server.playing, {stream}));
-      } catch(err) {
+        let stream;
+        let filename = sanitize("youtube-" + song.videoID + "-" + song.title + ".webm").replace(/\s+/g, "_");
+        let cacheDirectory = "audio_cache";
+        let pathname = cacheDirectory + "/" + filename;
+        if(CACHE_AUDIO && fs.existsSync(pathname)) {
+          stream = fs.createReadStream(pathname);
+        }
+        else {
+          stream = ytdl(song.url, {filter: "audioonly"});
+          if(CACHE_AUDIO) {
+            stream.pipe(fs.createWriteStream(pathname));
+          }
+        }
+        resolve(Object.assign(song, {stream}));
+      }
+      catch(err) {
         reject(err);
       }
     });
@@ -127,7 +141,7 @@ exports.run = async function(client, message, args) {
         if(song.begin) {
           let seek = convertHMSToSeconds(song.begin);
           // start at beginning and do not announce starting time for these conditions
-          if(seek === 0 || isNaN(seek) || seek >= song.length) {
+          if(seek === 0 || isNaN(seek) || seek >= song.durationSeconds) {
             song.begin = null;
           }
           else {
