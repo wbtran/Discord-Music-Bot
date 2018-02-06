@@ -65,14 +65,16 @@ exports.run = async function(client, message, args) {
 
 
   function searchSong(searchTerm, startTime) {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       let parsed = url.parse(searchTerm, true);
+      let videoLink;
       // youtube url
-      if(parsed.host === "www.youtube.com" && parsed.query.v) searchTerm = parsed.query.v;
+      if(parsed.host === "www.youtube.com" && parsed.query.v) videoLink = searchTerm;
       // youtu.be url
-      else if(parsed.host === "youtu.be" && parsed.path) searchTerm = parsed.pathname.slice(1);
-      yt.searchVideos(searchTerm, 1)
-        .then(videos => yt.getVideo(videos[0].url))
+      else if(parsed.host === "youtu.be" && parsed.path) videoLink = searchTerm;
+      // search term
+      else videoLink = (await yt.searchVideos(searchTerm, 1))[0].url;
+      yt.getVideo(videoLink)
         .then(video => {
           let duration = formatDuration(video.duration);
           let begin = startTime || parsed.query.t;
@@ -112,7 +114,6 @@ exports.run = async function(client, message, args) {
 
       let song = server.playing = server.queue.shift();
       try {
-        let cacheStream;
         let stream;
         let filename = sanitize("youtube-" + song.videoID + "-" + song.title + ".webm").replace(/\s+/g, "_");
         let cacheDirectory = "audio_cache";
@@ -121,9 +122,9 @@ exports.run = async function(client, message, args) {
           stream = fs.createReadStream(pathname);
         }
         else {
-          cacheStream = ytdl(song.url, {filter: "audioonly"});
           stream = ytdl(song.url);
           if(CACHE_AUDIO) {
+            let cacheStream = ytdl(song.url, {filter: "audioonly"});
             cacheStream.pipe(fs.createWriteStream(pathname));
           }
         }
