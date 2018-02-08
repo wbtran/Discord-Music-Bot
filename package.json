@@ -7,7 +7,7 @@
     "opusscript": "0.0.6",
     "sanitize-filename": "^1.6.1",
     "simple-youtube-api": "^5.0.0",
-    "ytdl-core": "^0.20.0"
+    "ytdl-core": "^0.20.1"
   },
   "devDependencies": {
     "eslint-config-google": "^0.9.1"

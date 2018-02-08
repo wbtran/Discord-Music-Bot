@@ -114,6 +114,7 @@ exports.run = async function(client, message, args) {
 
       let song = server.playing = server.queue.shift();
       try {
+        let cacheStream;
         let stream;
         let filename = sanitize("youtube-" + song.videoID + "-" + song.title + ".webm").replace(/\s+/g, "_");
         let cacheDirectory = "audio_cache";
@@ -124,8 +125,10 @@ exports.run = async function(client, message, args) {
         else {
           stream = ytdl(song.url);
           if(CACHE_AUDIO) {
-            let cacheStream = ytdl(song.url, {filter: "audioonly"});
-            cacheStream.pipe(fs.createWriteStream(pathname));
+            cacheStream = ytdl(song.url, {filter: "audioonly"});
+            cacheStream.on("info", () => {
+              cacheStream.pipe(fs.createWriteStream(pathname));
+            });
           }
         }
         resolve(Object.assign(song, {stream}));
